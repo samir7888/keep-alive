@@ -23,9 +23,11 @@ jobs:
 
           echo "::add-mask::$RENDER_BACKEND_URL"
 
+          # Use a temp file to capture body (helps debug 404s etc)
+          body=$(mktemp)
           rc=0
-          status=$(curl --silent --show-error --fail \
-            --output /dev/null \
+          status=$(curl --silent --show-error \
+            --output "$body" \
             --write-out "%{http_code}" \
             --max-time 60 \
             --retry 3 --retry-delay 10 --retry-all-errors \
@@ -35,7 +37,16 @@ jobs:
 
           if [ "$rc" -ne 0 ]; then
             echo "::error::Ping failed (curl exit code $rc). 22 = HTTP error, 28 = timeout, 6/7 = DNS/connection problem."
+            # Show a short snippet of the response body if non-empty
+            if [ -s "$body" ]; then
+              echo "--- Response body (first 400 bytes) ---"
+              head -c 400 "$body" | sed 's/^/  /'
+              echo
+              echo "--- end ---"
+            fi
+            rm -f "$body"
             exit 1
           fi
 
+          rm -f "$body"
           echo "Backend responded successfully."
