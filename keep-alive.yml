@@ -1,0 +1,41 @@
+name: Keep Render Backend Alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Render backend
+        env:
+          RENDER_BACKEND_URL: ${{ secrets.RENDER_BACKEND_URL }}
+        run: |
+          if [ -z "$RENDER_BACKEND_URL" ]; then
+            echo "::error::Secret RENDER_BACKEND_URL is missing or empty. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          echo "::add-mask::$RENDER_BACKEND_URL"
+
+          rc=0
+          status=$(curl --silent --show-error --fail \
+            --output /dev/null \
+            --write-out "%{http_code}" \
+            --max-time 60 \
+            --retry 3 --retry-delay 10 --retry-all-errors \
+            "$RENDER_BACKEND_URL") || rc=$?
+
+          echo "HTTP status: ${status:-none} (curl exit code: $rc)"
+
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Ping failed (curl exit code $rc). 22 = HTTP error, 28 = timeout, 6/7 = DNS/connection problem."
+            exit 1
+          fi
+
+          echo "Backend responded successfully."
